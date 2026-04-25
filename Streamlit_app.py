@@ -1,106 +1,130 @@
 import streamlit as st
-import numpy as np
-import hashlib
-import math
-import re
-from datetime import datetime
+import time
+import pandas as pd
 
-# ----------------------------
-# 🔱 CONFIG
-# ----------------------------
-st.set_page_config(page_title="Spartan Sentinel", layout="wide")
+# --- Configuration for the Streamlit App ---
+st.set_page_config(
+    page_title="Spartan Mesh Profit Navigator",
+    page_icon="💰",
+    layout="centered",
+    initial_sidebar_state="collapsed" 
+)
 
-RADIUS_UP = 17
-RADIUS_DOWN = 15
-VOXEL_SCALE = 1024
+# --- App Title and Introduction ---
+st.title("💰 Spartan Mesh Profit Navigator 💰")
+st.markdown("### Unlocking the Capital from Your Advanced Mesh Operations")
 
-# ----------------------------
-# 🔱 CORE MATH ENGINE
-# ----------------------------
-def quantize(values):
-    return np.rint(values * VOXEL_SCALE).astype(np.int64)
+# --- Fixed Parameters ---
+mesh_width = 17
+mesh_height = 15
+gap_units = 2
+logic_bits = 64
 
-def pack64(x, y, z):
-    mask = (1 << 21) - 1
-    offset = 1 << 20
-    return ((x + offset) & mask) << 42 | ((y + offset) & mask) << 21 | ((z + offset) & mask)
+# --- Displaying the Input Parameters ---
+st.subheader("Operational Context & Parameters:")
+col1, col2, col3, col4 = st.columns(4) 
+with col1:
+    st.metric("Mesh Width", f"{mesh_width} units")
+with col2:
+    st.metric("Mesh Height", f"{mesh_height} units")
+with col3:
+    st.metric("Gap Size", f"{gap_units} units")
+with col4:
+    st.metric("System Logic", f"{logic_bits}-bit")
 
-# ----------------------------
-# 🔱 HTT PROTOCOL (SAFE)
-# ----------------------------
-def run_htt(sequence):
-    clean = re.sub(r'[^ACGT]', '', sequence.upper())
+st.markdown("---") 
 
-    repeats = [len(m.group(0)) // 3 for m in re.finditer(r"(?:CAG)+", clean)]
-    max_cag = max(repeats, default=0)
+# --- The "Background Process" Function ---
+@st.cache_data(ttl=3600) 
+def perform_complex_profit_calculation(width, height, gap, logic):
+    st.write("🌌 Initializing Quantum Financial Engine...")
+    time.sleep(1.5) 
+    
+    value_per_unit_area = 150.0  
+    base_revenue = width * height * value_per_unit_area
+    st.write(f"Calculating Base Mesh Revenue: ${base_revenue:,.2f}")
+    time.sleep(1)
+    
+    cost_per_gap_unit = 75.0  
+    gap_penalty = gap * cost_per_gap_unit
+    st.write(f"Assessing Gap-related Penalties: -${gap_penalty:,.2f}")
+    time.sleep(1)
+    
+    base_logic_bits = 32.0
+    efficiency_multiplier = logic / base_logic_bits
+    st.write(f"Applying {logic}-bit Logic Efficiency Multiplier: {efficiency_multiplier:.2f}x")
+    time.sleep(1)
+    
+    net_profit = (base_revenue - gap_penalty) * efficiency_multiplier
+    st.success("Analysis Complete! Generating Final Report...")
+    time.sleep(1) 
+    
+    return net_profit, base_revenue, gap_penalty, efficiency_multiplier
 
-    points = max(36, max_cag)
-    theta = np.linspace(0, 4*np.pi, points)
-    z = np.linspace(0, 24, points)
+# --- Main Logic to Trigger and Display the Calculation ---
+st.subheader("Crunching the Numbers (Behind the Scenes)...")
 
-    lead_r = RADIUS_UP
-    lag_r = RADIUS_DOWN - max(0, (max_cag - 35) / 35)
+if "money_calculated" not in st.session_state:
+    st.session_state.money_calculated = False
+    st.session_state.final_money = None
+    st.session_state.report_data = None
 
-    x1 = quantize(np.cos(theta) * lead_r)
-    y1 = quantize(np.sin(theta) * lead_r)
-
-    x2 = quantize(np.cos(theta + np.pi) * lag_r)
-    y2 = quantize(np.sin(theta + np.pi) * lag_r)
-
-    z_i = quantize(z)
-    z_block = (z_i // 64) * 64
-
-    lead_keys = pack64(x1, y1, z_block)
-    lag_keys = pack64(x2, y2, z_block)
-
-    stream = []
-    for i in range(len(lead_keys)):
-        uid = int(lead_keys[i])
-        stream.append({
-            "idx": i,
-            "lane": "lead",
-            "uid": uid,
-            "voxel_hash": hashlib.sha256(str(uid).encode()).hexdigest()[:12]
-        })
-
-    return {
-        "max_cag": max_cag,
-        "stream": stream,
-        "unique_voxels": len(set(lead_keys) | set(lag_keys))
-    }
-
-# ----------------------------
-# 🔐 ZERO-KNOWLEDGE FORMATTER
-# ----------------------------
-def format_secure_stream(buf):
-    out = []
-    out.append("=== SPARTAN SECURE TENSOR STREAM ===")
-    out.append("[AES-256 BOUNDARY ENFORCED]\n")
-
-    for i, entry in enumerate(buf):
-        uid_mask = hashlib.sha256(str(entry["uid"]).encode()).hexdigest()[:10]
-
-        out.append(
-            f"IDX:{i:03d} | "
-            f"LANE:{entry['lane']} | "
-            f"VOXEL:{entry['voxel_hash']} | "
-            f"NODE:{uid_mask}"
+if not st.session_state.money_calculated:
+    with st.spinner("Our advanced algorithms are meticulously processing billions of data points..."):
+        final_money_value, base_rev, penalty, multiplier = perform_complex_profit_calculation(
+            mesh_width, mesh_height, gap_units, logic_bits
         )
+        st.session_state.final_money = final_money_value
+        
+        # Prepare data for Sheets export
+        st.session_state.report_data = pd.DataFrame([{
+            "Mesh Width": mesh_width,
+            "Mesh Height": mesh_height,
+            "Gap Units": gap_units,
+            "Logic Bits": logic_bits,
+            "Base Revenue ($)": base_rev,
+            "Gap Penalty ($)": penalty,
+            "Efficiency Multiplier": multiplier,
+            "Final Generated Capital ($)": final_money_value
+        }])
+        
+        st.session_state.money_calculated = True
+else:
+    final_money_value = st.session_state.final_money
 
-    return "\n".join(out)
+# --- Displaying the Money ---
+st.markdown("---")
+st.subheader("🎉 Your Spartan Mesh Financial Outlook! 🎉")
 
-# ----------------------------
-# 🔱 UI
-# ----------------------------
-st.title("🔱 Spartan Sentinel")
-st.caption("Zero-Knowledge Genomic Tensor Engine")
+if st.session_state.final_money is not None:
+    st.metric(label="Projected Generated Capital", value=f"${final_money_value:,.2f}")
+    st.balloons() 
+    
+    st.markdown("---")
+    st.subheader("📊 Export Ledger")
+    st.write("Download the structured breakdown for your records.")
+    
+    # Convert DataFrame to CSV for download
+    csv_data = st.session_state.report_data.to_csv(index=False).encode('utf-8')
+    
+    st.download_button(
+        label="Download Spreadsheet Ledger (CSV)",
+        data=csv_data,
+        file_name="Spartan_Mesh_Financial_Report_2026.csv",
+        mime="text/csv"
+    )
+else:
+    st.warning("Still calculating, please wait...")
 
-sequence = st.text_area("Enter DNA Sequence", "CAGCAGCAGCAGCAGCAGCAGCAG")
+st.markdown("---")
+st.info(
+    "💡 This calculation is purely illustrative based on a hypothetical formula. "
+    "Ready to integrate live data streams."
+)
 
-if st.button("Run Analysis"):
-    result = run_htt(sequence)
-
-    st.metric("Max CAG Repeats", result["max_cag"])
-    st.metric("Unique Voxels", result["unique_voxels"])
-
-    st.code(format_secure_stream(result["stream"]), language="text")
+if st.button("Recalculate (Reset Session)"):
+    st.session_state.money_calculated = False
+    st.session_state.final_money = None
+    st.session_state.report_data = None
+    st.cache_data.clear() 
+    st.rerun()
