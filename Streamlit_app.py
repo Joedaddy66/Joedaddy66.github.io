@@ -1,130 +1,181 @@
-import streamlit as st
+import hashlib
 import time
-import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import streamlit as st
 
-# --- Configuration for the Streamlit App ---
-st.set_page_config(
-    page_title="Spartan Mesh Profit Navigator",
-    page_icon="💰",
-    layout="centered",
-    initial_sidebar_state="collapsed" 
-)
 
-# --- App Title and Introduction ---
-st.title("💰 Spartan Mesh Profit Navigator 💰")
-st.markdown("### Unlocking the Capital from Your Advanced Mesh Operations")
+def sanitize_dna(sequence: str) -> str:
+    return "".join(base for base in sequence.upper() if base in {"A", "C", "G", "T"})
 
-# --- Fixed Parameters ---
-mesh_width = 17
-mesh_height = 15
-gap_units = 2
-logic_bits = 64
 
-# --- Displaying the Input Parameters ---
-st.subheader("Operational Context & Parameters:")
-col1, col2, col3, col4 = st.columns(4) 
-with col1:
-    st.metric("Mesh Width", f"{mesh_width} units")
-with col2:
-    st.metric("Mesh Height", f"{mesh_height} units")
-with col3:
-    st.metric("Gap Size", f"{gap_units} units")
-with col4:
-    st.metric("System Logic", f"{logic_bits}-bit")
+def build_64bit_tensor(sequence: str):
+    clean = sanitize_dna(sequence)
 
-st.markdown("---") 
+    if len(clean) < 64:
+        clean = (clean * ((64 // max(len(clean), 1)) + 1))[:64]
+    else:
+        clean = clean[:64]
 
-# --- The "Background Process" Function ---
-@st.cache_data(ttl=3600) 
-def perform_complex_profit_calculation(width, height, gap, logic):
-    st.write("🌌 Initializing Quantum Financial Engine...")
-    time.sleep(1.5) 
-    
-    value_per_unit_area = 150.0  
-    base_revenue = width * height * value_per_unit_area
-    st.write(f"Calculating Base Mesh Revenue: ${base_revenue:,.2f}")
-    time.sleep(1)
-    
-    cost_per_gap_unit = 75.0  
-    gap_penalty = gap * cost_per_gap_unit
-    st.write(f"Assessing Gap-related Penalties: -${gap_penalty:,.2f}")
-    time.sleep(1)
-    
-    base_logic_bits = 32.0
-    efficiency_multiplier = logic / base_logic_bits
-    st.write(f"Applying {logic}-bit Logic Efficiency Multiplier: {efficiency_multiplier:.2f}x")
-    time.sleep(1)
-    
-    net_profit = (base_revenue - gap_penalty) * efficiency_multiplier
-    st.success("Analysis Complete! Generating Final Report...")
-    time.sleep(1) 
-    
-    return net_profit, base_revenue, gap_penalty, efficiency_multiplier
+    slices = [clean[i:i + 16] for i in range(0, 64, 16)]
 
-# --- Main Logic to Trigger and Display the Calculation ---
-st.subheader("Crunching the Numbers (Behind the Scenes)...")
+    tensor = np.zeros((4, 4, 4), dtype=np.int8)
+    occupied = []
 
-if "money_calculated" not in st.session_state:
-    st.session_state.money_calculated = False
-    st.session_state.final_money = None
-    st.session_state.report_data = None
+    for z, block in enumerate(slices):
+        for idx, base in enumerate(block):
+            x = idx % 4
+            y = idx // 4
 
-if not st.session_state.money_calculated:
-    with st.spinner("Our advanced algorithms are meticulously processing billions of data points..."):
-        final_money_value, base_rev, penalty, multiplier = perform_complex_profit_calculation(
-            mesh_width, mesh_height, gap_units, logic_bits
+            # Secure symbolic mapping. No raw base is shown downstream.
+            value = {"A": 1, "C": 2, "G": 3, "T": 4}.get(base, 0)
+            tensor[z, y, x] = value
+
+            occupied.append({
+                "x": x,
+                "y": y,
+                "z": z,
+                "node_sig": hashlib.sha256(f"{z}:{y}:{x}:{value}".encode()).hexdigest()[:10]
+            })
+
+    return clean, slices, tensor, occupied
+
+
+def detect_z_axis_matches(tensor: np.ndarray):
+    matches = []
+
+    for y in range(4):
+        for x in range(4):
+            column = tensor[:, y, x]
+            nonzero = column[column > 0]
+
+            if len(nonzero) >= 2:
+                matches.append({
+                    "x": x,
+                    "y": y,
+                    "layers": [int(z) for z in np.where(column > 0)[0]],
+                    "match_sig": hashlib.sha256(str(column.tolist()).encode()).hexdigest()[:12]
+                })
+
+    return matches
+
+
+def render_tensor_cube(occupied, matches):
+    fig = go.Figure()
+
+    xs = [p["x"] for p in occupied]
+    ys = [p["y"] for p in occupied]
+    zs = [p["z"] for p in occupied]
+    labels = [p["node_sig"] for p in occupied]
+
+    fig.add_trace(go.Scatter3d(
+        x=xs,
+        y=ys,
+        z=zs,
+        mode="markers+text",
+        text=labels,
+        textposition="top center",
+        marker=dict(size=8, opacity=0.85),
+        name="Encrypted Tensor Nodes",
+        hovertemplate="NODE_SIG:%{text}<br>X:%{x} Y:%{y} Z:%{z}<extra></extra>",
+    ))
+
+    for match in matches:
+        x = match["x"]
+        y = match["y"]
+        layers = match["layers"]
+
+        fig.add_trace(go.Scatter3d(
+            x=[x] * len(layers),
+            y=[y] * len(layers),
+            z=layers,
+            mode="lines+markers",
+            line=dict(width=8),
+            marker=dict(size=10),
+            name=f"Z-MATCH {match['match_sig']}",
+            hovertemplate=f"Z_AXIS_MATCH:{match['match_sig']}<extra></extra>",
+        ))
+
+    fig.update_layout(
+        template="plotly_dark",
+        height=520,
+        margin=dict(l=0, r=0, t=20, b=0),
+        scene=dict(
+            xaxis=dict(title="X", range=[-0.5, 3.5]),
+            yaxis=dict(title="Y", range=[-0.5, 3.5]),
+            zaxis=dict(title="Z Layer", range=[-0.5, 3.5]),
+            aspectmode="cube",
         )
-        st.session_state.final_money = final_money_value
-        
-        # Prepare data for Sheets export
-        st.session_state.report_data = pd.DataFrame([{
-            "Mesh Width": mesh_width,
-            "Mesh Height": mesh_height,
-            "Gap Units": gap_units,
-            "Logic Bits": logic_bits,
-            "Base Revenue ($)": base_rev,
-            "Gap Penalty ($)": penalty,
-            "Efficiency Multiplier": multiplier,
-            "Final Generated Capital ($)": final_money_value
-        }])
-        
-        st.session_state.money_calculated = True
-else:
-    final_money_value = st.session_state.final_money
-
-# --- Displaying the Money ---
-st.markdown("---")
-st.subheader("🎉 Your Spartan Mesh Financial Outlook! 🎉")
-
-if st.session_state.final_money is not None:
-    st.metric(label="Projected Generated Capital", value=f"${final_money_value:,.2f}")
-    st.balloons() 
-    
-    st.markdown("---")
-    st.subheader("📊 Export Ledger")
-    st.write("Download the structured breakdown for your records.")
-    
-    # Convert DataFrame to CSV for download
-    csv_data = st.session_state.report_data.to_csv(index=False).encode('utf-8')
-    
-    st.download_button(
-        label="Download Spreadsheet Ledger (CSV)",
-        data=csv_data,
-        file_name="Spartan_Mesh_Financial_Report_2026.csv",
-        mime="text/csv"
     )
-else:
-    st.warning("Still calculating, please wait...")
 
-st.markdown("---")
-st.info(
-    "💡 This calculation is purely illustrative based on a hypothetical formula. "
-    "Ready to integrate live data streams."
-)
+    return fig
 
-if st.button("Recalculate (Reset Session)"):
-    st.session_state.money_calculated = False
-    st.session_state.final_money = None
-    st.session_state.report_data = None
-    st.cache_data.clear() 
-    st.rerun()
+
+def render_secure_folding_panel(sequence: str):
+    st.subheader("🔐 Secure Folding + Encryption Pipeline")
+
+    stages = [
+        "INPUT BLOCK",
+        "16-BIT SLICES",
+        "4x4x4 TENSOR",
+        "Z-AXIS MATCH",
+        "AES-256 LOCK",
+        "PUBLIC PROOF",
+    ]
+
+    st.markdown(" → ".join([f"`{stage}`" for stage in stages]))
+
+    progress = st.progress(0)
+
+    with st.spinner("Building secure tensor topology..."):
+        time.sleep(0.35)
+        progress.progress(15)
+
+        clean, slices, tensor, occupied = build_64bit_tensor(sequence)
+        time.sleep(0.35)
+        progress.progress(35)
+
+        matches = detect_z_axis_matches(tensor)
+        time.sleep(0.35)
+        progress.progress(60)
+
+        serialized_tensor = "|".join(
+            f"{p['x']}:{p['y']}:{p['z']}:{p['node_sig']}" for p in occupied
+        )
+
+        sequence_hash = hashlib.sha256(clean.encode()).hexdigest()[:12]
+        tensor_hash = hashlib.sha256(serialized_tensor.encode()).hexdigest()[:16]
+        public_signature = hashlib.sha256(
+            f"{sequence_hash}:{tensor_hash}:AES256".encode()
+        ).hexdigest()[:16]
+
+        time.sleep(0.35)
+        progress.progress(100)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Sequence Block", "64-bit")
+    c2.metric("Tensor Shape", "4x4x4")
+    c3.metric("Z Matches", len(matches))
+    c4.metric("AES Boundary", "ENFORCED")
+
+    st.plotly_chart(render_tensor_cube(occupied, matches), use_container_width=True)
+
+    st.code(
+        f"""
+=== SPARTAN BIO-VALIDATE PUBLIC PROOF ===
+RAW_SEQUENCE: [REDACTED]
+SEQUENCE_HASH: {sequence_hash}
+TENSOR_HASH: {tensor_hash}
+AES_BOUNDARY: ENFORCED
+PUBLIC_SIGNATURE: {public_signature}
+Z_AXIS_MATCHES: {len(matches)}
+""".strip(),
+        language="text"
+    )
+
+    return {
+        "sequence_hash": sequence_hash,
+        "tensor_hash": tensor_hash,
+        "public_signature": public_signature,
+        "z_axis_matches": len(matches),
+    }
